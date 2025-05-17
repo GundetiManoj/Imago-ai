@@ -47,7 +47,7 @@ def run_pipeline(pdf_path: str, user_query: str):
     print("\n==== FINAL RESPONSE ====")
     print("Response:", result['response_text'])
     if result['abstain']:
-        print("⚠️  ABSTAINED")
+        print("ABSTAINED")
         print("Reason:", result['reason'])
     print("========================")
 

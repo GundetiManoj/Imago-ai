@@ -10,7 +10,7 @@ from transformers import pipeline
 class ResponseGeneratorAgent:
     def __init__(
         self,
-        model_name: str = "llama-3.1-8b-instant",
+        model_name: str = "llama-3.3-70b-versatile",
         api_key: Optional[str] = None,
         hallucination_threshold: float = 0.85,
         use_local_fallback: bool = True
@@ -18,7 +18,7 @@ class ResponseGeneratorAgent:
         """
         Initialize the response generator agent with Groq API.
 
-        :param model_name: Groq model name (llama-3.1-8b-instant is a good balance)
+        :param model_name: Groq model name (llama-3.3-70b-versatile is a good balance)
         :param api_key: API key for Groq authentication
         :param hallucination_threshold: Confidence threshold above which to abstain
         :param use_local_fallback: Whether to use local model as fallback

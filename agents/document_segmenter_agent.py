@@ -47,7 +47,7 @@ class DocumentSegmenter:
             chunk_text = document_text[start:end]
             
             # Determine current page based on chunk position
-            current_page = 1  # Default to page 1
+            current_page = 1  
             for pos, page in sorted(page_markers.items()):
                 if pos <= start:
                     current_page = page

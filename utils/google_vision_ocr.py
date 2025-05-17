@@ -11,7 +11,6 @@ import os
 # Initializes Google Cloud Vision client (relies on GOOGLE_APPLICATION_CREDENTIALS env variable)
 client = vision.ImageAnnotatorClient()
 
-
 def extract_text_and_image_metadata(pdf_path: str, dpi: int = 300) -> Tuple[str, List[Dict]]:
     """
     Convert PDF pages to images and extract:

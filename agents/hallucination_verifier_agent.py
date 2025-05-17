@@ -80,13 +80,13 @@ class HallucinationVerifierAgent:
             text = chunk.get("text", "")
             
             # Initialize base score
-            score = 0.5  # Neutral starting point
+            score = 0.5 
             
-            # 1. Check for factual indicators that reduce hallucination risk
+            # Check for factual indicators that reduce hallucination risk
             factual_matches = sum(1 for word in self.factual_indicators if word in text.lower())
             score -= factual_matches * 0.05  # Reduce score for each factual indicator
             
-            # 2. Check if query terms are in the chunk
+            #  Check if query terms are in the chunk
             query_terms = set(re.findall(r'\b\w{4,}\b', query.lower()))
             text_terms = set(re.findall(r'\b\w{4,}\b', text.lower()))
             query_term_matches = len(query_terms.intersection(text_terms))
@@ -96,13 +96,13 @@ class HallucinationVerifierAgent:
                 match_ratio = query_term_matches / len(query_terms)
                 score -= match_ratio * 0.2
             
-            # 3. Length and detail checks
+            # Length and detail checks
             if len(text) < 100:
                 score += 0.1  # Short responses have higher hallucination risk
             if len(text) > 500:
                 score -= 0.1  # Detailed responses have lower hallucination risk
                 
-            # 4. Numbers, dates, and specific details suggest factual content
+            #  Numbers, dates, and specific details suggest factual content
             if re.search(r'\b\d+(\.\d+)?(cm|mm|m|kg|g|lb|inch|ft|°C|°F)\b', text):
                 score -= 0.15  # Measurements suggest factual content
                 

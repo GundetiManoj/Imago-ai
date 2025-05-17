@@ -142,25 +142,25 @@ class ImageRelevanceAgent:
         :param filename: Image filename
         :return: Boolean indicating relevance
         """
-        # RULE 1: Check for references
+        # Check for references
         text_references = set(self.reference_pattern.findall(text))
         desc_references = set(self.reference_pattern.findall(description))
         if text_references and desc_references and text_references.intersection(desc_references):
             return True
         
-        # RULE 2: Check for relevance indicators
+        # Check for relevance indicators
         for indicator in self.relevance_indicators:
             if indicator in description.lower() and indicator in text.lower():
                 return True
         
-        # RULE 3: Check for descriptive filename
+        # Check for descriptive filename
         if filename:
             filename_lower = filename.lower()
             for indicator in self.relevance_indicators:
                 if indicator in filename_lower:
                     return True
                     
-        # RULE 4: Check if entire description appears in text
+        # Check if entire description appears in text
         if description and len(description) > 15 and description.lower() in text.lower():
             return True
             

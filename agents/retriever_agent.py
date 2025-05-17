@@ -1,5 +1,4 @@
 # agents/retriever_agent.py
-
 from typing import List, Dict, Optional
 from sentence_transformers import SentenceTransformer, util
 import numpy as np
