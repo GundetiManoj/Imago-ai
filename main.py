@@ -28,19 +28,21 @@ def run_pipeline(pdf_path: str, user_query: str):
 
     # Step 4: Retrieve relevant context for the query
     print("[INFO] Retrieving relevant context...")
-    retriever = RetrieverAgent(corpus=chunks)  # Fixed: Added corpus parameter
-    retrieved_chunks = retriever.retrieve(query=user_query)  # Removed chunks param
+    retriever = RetrieverAgent(corpus=chunks)
+    retrieved_chunks = retriever.retrieve(query=user_query)
 
     # Step 5: Detect hallucination risk
     print("[INFO] Checking for hallucination risks...")
-    verifier = HallucinationVerifierAgent()
-    hallucination_scores = verifier.score_chunks(retrieved_chunks)  # Fixed: Use the implemented method
+    verifier = HallucinationVerifierAgent(threshold=0.85)  # Higher threshold to be less conservative
+    
+    # FIXED: Use score_hallucination instead of score_chunks
+    hallucination_scores = verifier.score_hallucination(user_query, retrieved_chunks)
 
     # Step 6: Generate response using LLaMA via Groq
     print("[INFO] Generating response...")
-    response_agent = ResponseGeneratorAgent()
+    response_agent = ResponseGeneratorAgent(hallucination_threshold=0.85)  # Higher threshold
     result = response_agent.generate_response(
-        question=user_query,  # Fixed: Changed parameter name to match function definition
+        question=user_query,
         context_chunks=retrieved_chunks,
         hallucination_scores=hallucination_scores
     )
@@ -48,7 +50,7 @@ def run_pipeline(pdf_path: str, user_query: str):
     print("\n==== FINAL RESPONSE ====")
     print("Response:", result['response_text'])
     if result['abstain']:
-        print("ABSTAINED")
+        print("⚠️  ABSTAINED")
         print("Reason:", result['reason'])
     print("========================")
 
@@ -56,5 +58,5 @@ def run_pipeline(pdf_path: str, user_query: str):
 if __name__ == "__main__":
     # Hardcode your input PDF path and query here:
     input_file = r"datasets\21583473018.pdf"
-    user_query = "What is the Graduate Record Examination?"
+    user_query = "Say about GRE"
     run_pipeline(input_file, user_query)
