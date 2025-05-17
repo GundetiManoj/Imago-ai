@@ -1,4 +1,3 @@
-# main.py
 from agents.document_segmenter_agent import DocumentSegmenter
 from agents.retriever_agent import RetrieverAgent
 from agents.image_relevance_agent import ImageRelevanceAgent
@@ -8,7 +7,7 @@ from utils.google_vision_ocr import extract_text_and_image_metadata
 import sys
 from dotenv import load_dotenv
 load_dotenv()
-# main.py (fixed)
+
 def run_pipeline(pdf_path: str, user_query: str):
     print("[INFO] Starting RAG pipeline...")
     
@@ -33,14 +32,12 @@ def run_pipeline(pdf_path: str, user_query: str):
 
     # Step 5: Detect hallucination risk
     print("[INFO] Checking for hallucination risks...")
-    verifier = HallucinationVerifierAgent(threshold=0.85)  # Higher threshold to be less conservative
-    
-    # FIXED: Use score_hallucination instead of score_chunks
+    verifier = HallucinationVerifierAgent(threshold=0.85)
     hallucination_scores = verifier.score_hallucination(user_query, retrieved_chunks)
 
-    # Step 6: Generate response using LLaMA via Groq
+    # Step 6: Generate response using LLM
     print("[INFO] Generating response...")
-    response_agent = ResponseGeneratorAgent(hallucination_threshold=0.85)  # Higher threshold
+    response_agent = ResponseGeneratorAgent(hallucination_threshold=0.85)
     result = response_agent.generate_response(
         question=user_query,
         context_chunks=retrieved_chunks,
@@ -58,5 +55,6 @@ def run_pipeline(pdf_path: str, user_query: str):
 if __name__ == "__main__":
     # Hardcode your input PDF path and query here:
     input_file = r"datasets\21583473018.pdf"
-    user_query = "Say about GRE"
+    user_query = "What is the purpose of this document?"
+
     run_pipeline(input_file, user_query)

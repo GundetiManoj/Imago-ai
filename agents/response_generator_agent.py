@@ -3,68 +3,36 @@
 from typing import List, Dict, Optional
 import os
 import requests
+import json
 import re
 from transformers import pipeline
-
-class GroqClient:
-    def __init__(self, api_key=None):
-        self.api_key = api_key or os.getenv("GROQ_API_KEY")
-        if not self.api_key:
-            raise ValueError("API key must be provided for GroqClient.")
-        self.endpoint = "https://api.groq.com/openai/v1/completions"
-        
-    def generate(self, model, prompt, max_tokens=256, temperature=0.7):
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": model,
-            "prompt": prompt,
-            "max_tokens": max_tokens,
-            "temperature": temperature
-        }
-        
-        response = requests.post(self.endpoint, headers=headers, json=payload, timeout=10)
-        if response.status_code != 200:
-            raise Exception(f"Error calling Groq API: {response.text}")
-            
-        result = response.json()
-        return type('Response', (), {
-            'generated_text': result.get('choices', [{}])[0].get('text', '')
-        })
-
 
 class ResponseGeneratorAgent:
     def __init__(
         self,
-        model_name: str = "groq-llama-3.3-70b-versatile",
+        model_name: str = "llama-3.1-8b-instant",
         api_key: Optional[str] = None,
         hallucination_threshold: float = 0.85,
         use_local_fallback: bool = True
     ):
         """
-        Initialize the response generator agent with Groq LLaMA client.
+        Initialize the response generator agent with Groq API.
 
-        :param model_name: Groq LLaMA model name
+        :param model_name: Groq model name (llama-3.1-8b-instant is a good balance)
         :param api_key: API key for Groq authentication
         :param hallucination_threshold: Confidence threshold above which to abstain
         :param use_local_fallback: Whether to use local model as fallback
         """
-        # Set up API client if possible
-        self.use_api = False
-        try:
-            api_key = api_key or os.getenv("GROQ_API_KEY")
-            if api_key:
-                self.client = GroqClient(api_key=api_key)
-                self.use_api = True
-            else:
-                print("[WARNING] No API key provided - will use local fallback model only")
-        except Exception as e:
-            print(f"[WARNING] Could not initialize API client: {e}")
-
+        # Set up API connection
+        self.api_key = api_key or os.getenv("GROQ_API_KEY")
+        self.api_url = "https://api.groq.com/openai/v1/chat/completions"
         self.model_name = model_name
         self.hallucination_threshold = hallucination_threshold
+        
+        # Check if API key is available
+        self.use_api = bool(self.api_key)
+        if not self.use_api:
+            print("[WARNING] No Groq API key provided - will use local fallback model only")
         
         # Initialize local fallback model if requested
         self.use_local_fallback = use_local_fallback
@@ -75,35 +43,24 @@ class ResponseGeneratorAgent:
                 # Use a small local model for fallback
                 self.local_model = pipeline(
                     "text-generation",
-                    model="databricks/dolly-v2-3b",  # You can use a smaller model too
+                    model="TinyLlama/TinyLlama-1.1B-Chat-v1.0",  # Small model that works on most hardware
                     device_map="auto",  # Use GPU if available
                     torch_dtype="auto"
                 )
                 print("[INFO] Local fallback model loaded successfully")
             except Exception as e:
                 print(f"[WARNING] Could not load local fallback model: {e}")
-                print("[INFO] Trying to load a smaller model...")
-                try:
-                    # Try an even smaller model
-                    self.local_model = pipeline(
-                        "text-generation", 
-                        model="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-                        device_map="auto"
-                    )
-                    print("[INFO] Smaller local fallback model loaded")
-                except Exception as e2:
-                    print(f"[WARNING] Could not load smaller fallback model: {e2}")
 
     def generate_response(
         self,
         context_chunks: List[Dict],
         question: str,
         hallucination_scores: Optional[List[float]] = None,
-        max_tokens: int = 256,
+        max_tokens: int = 512,
         temperature: float = 0.7,
     ) -> Dict:
         """
-        Generate a final response using available models and fallbacks.
+        Generate a final response using Groq API or local fallback.
 
         :param context_chunks: List of dicts containing 'text' and optionally 'images' metadata
         :param question: The user question string
@@ -113,8 +70,17 @@ class ResponseGeneratorAgent:
 
         :return: Dict with keys 'response_text', 'abstain', and 'reason'
         """
-        # Abstain if hallucination risk too high
+        # Print hallucination scores for monitoring
         if hallucination_scores:
+            print("\n[INFO] Hallucination Scores:")
+            for i, score in enumerate(hallucination_scores):
+                risk_level = "LOW" if score < 0.4 else "MEDIUM" if score < 0.7 else "HIGH"
+                print(f"  Chunk {i+1}: {score:.2f} ({risk_level} risk)")
+            print(f"  Max Score: {max(hallucination_scores):.2f}")
+            print(f"  Avg Score: {sum(hallucination_scores)/len(hallucination_scores):.2f}")
+            print(f"  Threshold: {self.hallucination_threshold}")
+            
+            # Abstain if hallucination risk too high
             max_score = max(hallucination_scores)
             if max_score > self.hallucination_threshold:
                 return {
@@ -145,27 +111,48 @@ class ResponseGeneratorAgent:
                 "reason": "Aggregated context is empty.",
             }
 
-        # Prepare prompt for generation
-        prompt = f"Context:\n{aggregated_text}\n\nQuestion:\n{question}\n\nAnswer:"
-
-        # First try using the API if available
+        # First try using the Groq API if available
         if self.use_api:
             try:
                 print("[INFO] Generating response with Groq API...")
-                generation_response = self.client.generate(
-                    model=self.model_name,
-                    prompt=prompt,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                )
-                generated_text = generation_response.generated_text.strip()
                 
-                if generated_text:
-                    return {
-                        "response_text": generated_text,
-                        "abstain": False,
-                        "reason": None,
-                    }
+                # Build the messages for the API
+                messages = [
+                    {"role": "system", "content": "You are a helpful assistant that answers questions based on the provided context."},
+                    {"role": "user", "content": f"Context: {aggregated_text}\n\nQuestion: {question}\n\nPlease answer the question based only on the provided context."}
+                ]
+                
+                # Prepare request
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                }
+                
+                payload = {
+                    "model": self.model_name,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature
+                }
+                
+                # Make API call
+                response = requests.post(self.api_url, headers=headers, json=payload, timeout=30)
+                
+                # Process response
+                if response.status_code == 200:
+                    api_response = response.json()
+                    if "choices" in api_response and api_response["choices"]:
+                        generated_text = api_response["choices"][0]["message"]["content"].strip()
+                        
+                        if generated_text:
+                            return {
+                                "response_text": generated_text,
+                                "abstain": False,
+                                "reason": None,
+                            }
+                else:
+                    raise Exception(f"API error: {response.status_code} - {response.text}")
+                    
             except Exception as e:
                 print(f"[WARNING] API generation failed: {e}")
                 # Continue to fallback if API fails
@@ -174,13 +161,8 @@ class ResponseGeneratorAgent:
         if self.local_model:
             try:
                 print("[INFO] Using local fallback model for generation...")
-                # Truncate context if too long for local model
-                if len(prompt) > 2048:
-                    # Keep question intact but truncate context
-                    question_part = f"Question:\n{question}\n\nAnswer:"
-                    context_limit = 2048 - len(question_part) - 20
-                    truncated_context = aggregated_text[:context_limit] + "..."
-                    prompt = f"Context:\n{truncated_context}\n\n{question_part}"
+                # Create prompt for local model
+                prompt = f"Context: {aggregated_text[:1000]}...\n\nQuestion: {question}\n\nAnswer:"
                 
                 # Generate with local model
                 local_response = self.local_model(
@@ -188,8 +170,7 @@ class ResponseGeneratorAgent:
                     max_length=len(prompt.split()) + 100,
                     temperature=temperature,
                     do_sample=True,
-                    top_p=0.9,
-                    pad_token_id=self.local_model.tokenizer.eos_token_id
+                    top_p=0.9
                 )
                 
                 # Extract just the generated part (after the prompt)
@@ -197,7 +178,7 @@ class ResponseGeneratorAgent:
                 if len(generated_text) > len(prompt):
                     generated_text = generated_text[len(prompt):].strip()
                 else:
-                    generated_text = "Based on the provided context, " + self._extract_answer_manually(context_chunks, question)
+                    generated_text = "Based on the context, " + self._extract_answer_manually(context_chunks, question)
                 
                 return {
                     "response_text": generated_text,
@@ -207,7 +188,7 @@ class ResponseGeneratorAgent:
             except Exception as e:
                 print(f"[WARNING] Local generation failed: {e}")
         
-        # If everything failed, generate a simple extractive answer
+        # Final fallback - simple extraction
         try:
             print("[INFO] Falling back to rule-based response extraction...")
             extracted_answer = self._extract_answer_manually(context_chunks, question)
