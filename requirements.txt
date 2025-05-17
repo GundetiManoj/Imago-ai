@@ -1,0 +1,10 @@
+PyPDF2
+Pillow
+fitz
+transformers
+torch
+langchain
+openai
+cassio
+astrapy
+sentence-transformers  # if you're using local embeddings
